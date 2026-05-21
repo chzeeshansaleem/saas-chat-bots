@@ -14,7 +14,7 @@ const nav = [
   { href: '/dashboard/knowledge', label: 'Sources', icon: Database },
   { href: '/upload', label: 'Upload', icon: Upload },
   { href: '/dashboard/crawl-jobs', label: 'Crawl Jobs', icon: Database },
-  { href: '/chat', label: 'Chat', icon: MessageSquare },
+  { href: '/dashboard/chat', label: 'Chat', icon: MessageSquare },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 

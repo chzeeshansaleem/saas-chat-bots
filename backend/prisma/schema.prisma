@@ -40,6 +40,20 @@ enum ChatMessageRole {
   USER
   ASSISTANT
   SYSTEM
+  TOOL
+}
+
+enum ChatSessionStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum ChatTitleJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 model User {
@@ -64,6 +78,7 @@ model Tenant {
   documents        Document[]
   documentChunks   DocumentChunk[]
   chatSessions     ChatSession[]
+  chatTitleJobs     ChatTitleJob[]
   crawlJobs        CrawlJob[]
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
@@ -156,31 +171,57 @@ model Embedding {
 }
 
 model ChatSession {
-  id        String        @id @default(uuid())
-  tenantId  String        @map("tenant_id")
-  userId    String        @map("user_id")
-  title     String        @default("New conversation")
-  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  messages  ChatMessage[]
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime      @updatedAt @map("updated_at")
+  id                  String            @id @default(uuid())
+  tenantId            String            @map("tenant_id")
+  userId              String            @map("user_id")
+  title               String            @default("New Chat")
+  titleManuallyEdited Boolean           @default(false) @map("title_manually_edited")
+  status              ChatSessionStatus @default(ACTIVE)
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages            ChatMessage[]
+  titleJobs           ChatTitleJob[]
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  lastMessageAt       DateTime?         @map("last_message_at")
 
-  @@index([tenantId, userId])
+  @@index([tenantId, userId, status])
+  @@index([tenantId, updatedAt])
   @@map("chat_sessions")
 }
 
 model ChatMessage {
-  id          String          @id @default(uuid())
-  sessionId   String          @map("session_id")
-  role        ChatMessageRole
-  content     String
-  sources     Json            @default("[]")
-  tokenCount  Int?            @map("token_count")
-  session     ChatSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  createdAt   DateTime        @default(now()) @map("created_at")
+  id            String          @id @default(uuid())
+  tenantId      String          @map("tenant_id")
+  chatSessionId String          @map("session_id")
+  userId        String?         @map("user_id")
+  role          ChatMessageRole
+  content       String
+  metadata      Json            @default("{}")
+  sources       Json            @default("[]")
+  tokenUsage    Json            @default("{}") @map("token_usage")
+  tokenCount    Int?            @map("token_count")
+  session       ChatSession     @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  createdAt     DateTime        @default(now()) @map("created_at")
 
-  @@index([sessionId, createdAt])
+  @@index([tenantId, chatSessionId, createdAt])
+  @@index([tenantId, userId, createdAt])
   @@map("chat_messages")
+}
+
+model ChatTitleJob {
+  id            String             @id @default(uuid())
+  tenantId      String             @map("tenant_id")
+  chatSessionId String             @map("chat_session_id")
+  status        ChatTitleJobStatus @default(PENDING)
+  generatedTitle String?           @map("generated_title")
+  errorMessage  String?            @map("error_message")
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session       ChatSession        @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  createdAt     DateTime           @default(now()) @map("created_at")
+  completedAt   DateTime?          @map("completed_at")
+
+  @@index([tenantId, chatSessionId, status])
+  @@map("chat_title_jobs")
 }
 
 model CrawlJob {

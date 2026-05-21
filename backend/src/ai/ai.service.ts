@@ -9,6 +9,11 @@ export type RagAnswerChunk =
   | { type: 'delta'; delta: string }
   | { type: 'done' };
 
+export type RagHistoryMessage = {
+  role: 'USER' | 'ASSISTANT' | 'SYSTEM' | 'TOOL';
+  content: string;
+};
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -24,7 +29,7 @@ export class AiService {
     this.chatModel = config.get<string>('OPENAI_CHAT_MODEL', 'gpt-4.1-mini');
   }
 
-  async *streamRagAnswer(tenantId: string, question: string): AsyncGenerator<RagAnswerChunk> {
+  async *streamRagAnswer(tenantId: string, question: string, history: RagHistoryMessage[] = []): AsyncGenerator<RagAnswerChunk> {
     const startedAt = Date.now();
     this.logger.log(
       `RAG answer requested ${JSON.stringify({
@@ -65,6 +70,10 @@ export class AiService {
           content:
             'You are a tenant-isolated knowledge base assistant. Answer only from the provided context. If the answer is not present, say exactly: "I could not find this information in the knowledge base." Mention source numbers when useful. Never invent facts.',
         },
+        ...history.slice(-20).map((message) => ({
+          role: message.role === 'ASSISTANT' ? ('assistant' as const) : ('user' as const),
+          content: message.content,
+        })),
         {
           role: 'user',
           content: `Context:\n${context || 'No matching knowledge base context.'}\n\nQuestion: ${question}`,
@@ -84,4 +93,35 @@ export class AiService {
     );
     yield { type: 'done' };
   }
+
+  async generateChatTitle(messages: RagHistoryMessage[]) {
+    const conversation = messages
+      .slice(0, 6)
+      .map((message) => `${message.role === 'ASSISTANT' ? 'Assistant' : 'User'}: ${message.content}`)
+      .join('\n');
+
+    const response = await this.client.chat.completions.create({
+      model: this.chatModel,
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Generate a short, clear title for this chat based on the conversation.\n\nRules:\n- 3 to 7 words\n- No quotes\n- No emojis\n- Title case\n- Must describe the user main topic\n- Do not include generic words like "Chat" or "Conversation"\n\nReturn only the title.',
+        },
+        {
+          role: 'user',
+          content: `Conversation:\n${conversation}`,
+        },
+      ],
+    });
+
+    return sanitizeTitle(response.choices[0]?.message?.content || 'New Chat');
+  }
+}
+
+function sanitizeTitle(value: string) {
+  const cleaned = value.replace(/["'`]/g, '').replace(/\s+/g, ' ').trim();
+  const words = cleaned.split(' ').filter(Boolean).slice(0, 7);
+  return words.length >= 3 ? words.join(' ') : cleaned || 'New Chat';
 }

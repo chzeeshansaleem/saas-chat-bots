@@ -1,6 +1,6 @@
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 
-export class CreateChatSessionDto {
+export class UpdateChatSessionDto {
   @IsOptional()
   @IsString()
   @MaxLength(120)
