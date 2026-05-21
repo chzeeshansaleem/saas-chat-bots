@@ -1,0 +1,33 @@
+{
+  "name": "multi-chatbot-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Phase 1 multi-tenant AI knowledge base chatbot platform.",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "dependencies": {
+    "@nestjs/common": "^11.1.21",
+    "@nestjs/core": "^11.1.21",
+    "@nestjs/platform-express": "^11.1.21",
+    "@nestjs/platform-socket.io": "^11.1.21",
+    "@nestjs/websockets": "^11.1.21",
+    "rxjs": "^7.8.2"
+  },
+  "scripts": {
+    "dev": "docker compose up --build",
+    "dev:backend": "npm --workspace backend run start:dev",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "build": "npm --workspace backend run build && npm --workspace frontend run build",
+    "lint": "npm --workspace backend run lint && npm --workspace frontend run lint"
+  },
+  "overrides": {
+    "@nestjs/common": "^11.1.21",
+    "@nestjs/core": "^11.1.21",
+    "rxjs": "^7.8.2"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  }
+}

@@ -1,0 +1,215 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum KnowledgeSourceType {
+  WEBSITE
+  PDF
+  DOCX
+  TXT
+}
+
+enum KnowledgeSourceStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum CrawlJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  name         String?
+  passwordHash String       @map("password_hash")
+  refreshHash  String?      @map("refresh_hash")
+  memberships  Membership[]
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Tenant {
+  id               String            @id @default(uuid())
+  name             String
+  slug             String            @unique
+  memberships      Membership[]
+  knowledgeSources KnowledgeSource[]
+  documents        Document[]
+  documentChunks   DocumentChunk[]
+  chatSessions     ChatSession[]
+  crawlJobs        CrawlJob[]
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  @@map("tenants")
+}
+
+model Membership {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tenantId  String   @map("tenant_id")
+  role      Role     @default(MEMBER)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@map("memberships")
+}
+
+model KnowledgeSource {
+  id          String                @id @default(uuid())
+  tenantId    String                @map("tenant_id")
+  type        KnowledgeSourceType
+  status      KnowledgeSourceStatus @default(PENDING)
+  name        String
+  url         String?
+  filePath    String?               @map("file_path")
+  metadata    Json                  @default("{}")
+  tenant      Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documents   Document[]
+  crawlJobs   CrawlJob[]
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+
+  @@index([tenantId, type])
+  @@map("knowledge_sources")
+}
+
+model Document {
+  id                String          @id @default(uuid())
+  tenantId          String          @map("tenant_id")
+  knowledgeSourceId String          @map("knowledge_source_id")
+  title             String
+  uri               String
+  contentHash       String          @map("content_hash")
+  rawText           String          @map("raw_text")
+  metadata          Json            @default("{}")
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  knowledgeSource   KnowledgeSource @relation(fields: [knowledgeSourceId], references: [id], onDelete: Cascade)
+  chunks            DocumentChunk[]
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  @@unique([tenantId, contentHash])
+  @@index([tenantId, knowledgeSourceId])
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id         String     @id @default(uuid())
+  tenantId   String     @map("tenant_id")
+  documentId String     @map("document_id")
+  ordinal    Int
+  content    String
+  tokenCount Int        @map("token_count")
+  metadata   Json       @default("{}")
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  document   Document   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  embedding  Embedding?
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@unique([documentId, ordinal])
+  @@index([tenantId, documentId])
+  @@map("document_chunks")
+}
+
+model Embedding {
+  id        String                  @id @default(uuid())
+  chunkId   String                  @unique @map("chunk_id")
+  tenantId  String                  @map("tenant_id")
+  model     String
+  vector    Unsupported("vector(1536)")
+  chunk     DocumentChunk           @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+  createdAt DateTime                @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("embeddings")
+}
+
+model ChatSession {
+  id        String        @id @default(uuid())
+  tenantId  String        @map("tenant_id")
+  userId    String        @map("user_id")
+  title     String        @default("New conversation")
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  @@index([tenantId, userId])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id          String          @id @default(uuid())
+  sessionId   String          @map("session_id")
+  role        ChatMessageRole
+  content     String
+  sources     Json            @default("[]")
+  tokenCount  Int?            @map("token_count")
+  session     ChatSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@index([sessionId, createdAt])
+  @@map("chat_messages")
+}
+
+model CrawlJob {
+  id                String          @id @default(uuid())
+  tenantId          String          @map("tenant_id")
+  knowledgeSourceId String          @map("knowledge_source_id")
+  rootUrl           String          @map("root_url")
+  status            CrawlJobStatus  @default(QUEUED)
+  depth             Int             @default(2)
+  pageLimit         Int             @default(50) @map("page_limit")
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  knowledgeSource   KnowledgeSource @relation(fields: [knowledgeSourceId], references: [id], onDelete: Cascade)
+  logs              CrawlLog[]
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@map("crawl_jobs")
+}
+
+model CrawlLog {
+  id         String   @id @default(uuid())
+  crawlJobId String   @map("crawl_job_id")
+  url        String
+  statusCode Int?     @map("status_code")
+  message    String?
+  crawledAt  DateTime @default(now()) @map("crawled_at")
+  crawlJob   CrawlJob @relation(fields: [crawlJobId], references: [id], onDelete: Cascade)
+
+  @@index([crawlJobId])
+  @@map("crawl_logs")
+}
