@@ -100,6 +100,30 @@ enum HttpMethod {
   DELETE
 }
 
+enum BotStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum WidgetPosition {
+  BOTTOM_RIGHT
+  BOTTOM_LEFT
+}
+
+enum WidgetSessionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum ToolExecutionStatus {
+  PENDING_CONFIRMATION
+  EXECUTING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
 model User {
   id           String       @id @default(uuid())
   email        String       @unique
@@ -134,6 +158,15 @@ model Tenant {
   webhookEvents    WebhookEvent[]
   externalResourceCaches ExternalResourceCache[]
   customApiConnectors CustomApiConnector[]
+  bots             Bot[]
+  widgetUsers      WidgetUser[]
+  widgetSessions   WidgetSession[]
+  apiConnectors    ApiConnector[]
+  authConfigs      AuthConfig[]
+  oauthConnections OAuthConnection[]
+  apiCredentials   ApiCredential[]
+  toolExecutions   ToolExecution[]
+  actionConfirmations ActionConfirmation[]
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
 
@@ -228,17 +261,26 @@ model ChatSession {
   id                  String            @id @default(uuid())
   tenantId            String            @map("tenant_id")
   userId              String            @map("user_id")
+  botId               String?           @map("bot_id")
+  widgetSessionId     String?           @map("widget_session_id")
   title               String            @default("New Chat")
   titleManuallyEdited Boolean           @default(false) @map("title_manually_edited")
   status              ChatSessionStatus @default(ACTIVE)
   tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bot                 Bot?              @relation(fields: [botId], references: [id], onDelete: SetNull)
+  widgetSession       WidgetSession?    @relation(fields: [widgetSessionId], references: [id], onDelete: SetNull)
   messages            ChatMessage[]
   titleJobs           ChatTitleJob[]
+  toolExecutions      ToolExecution[]
+  actionConfirmations ActionConfirmation[]
+  actionLogs          ActionLog[]
   createdAt           DateTime          @default(now()) @map("created_at")
   updatedAt           DateTime          @updatedAt @map("updated_at")
   lastMessageAt       DateTime?         @map("last_message_at")
 
   @@index([tenantId, userId, status])
+  @@index([tenantId, botId, status])
+  @@index([widgetSessionId])
   @@index([tenantId, updatedAt])
   @@map("chat_sessions")
 }
@@ -363,7 +405,9 @@ model ActionRequest {
 model ActionLog {
   id            String          @id @default(uuid())
   tenantId      String          @map("tenant_id")
-  userId        String          @map("user_id")
+  userId        String?         @map("user_id")
+  botId         String?         @map("bot_id")
+  chatSessionId String?         @map("chat_session_id")
   integrationId String?         @map("integration_id")
   toolName      String          @map("tool_name")
   actionType    ToolActionType  @map("action_type")
@@ -372,13 +416,251 @@ model ActionLog {
   status        ActionLogStatus
   errorMessage  String?         @map("error_message")
   tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bot           Bot?            @relation(fields: [botId], references: [id], onDelete: SetNull)
+  chatSession   ChatSession?    @relation(fields: [chatSessionId], references: [id], onDelete: SetNull)
   integration   TenantIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  confirmedAt   DateTime?       @map("confirmed_at")
+  executedAt    DateTime?       @map("executed_at")
   createdAt     DateTime        @default(now()) @map("created_at")
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, botId, createdAt])
+  @@index([tenantId, chatSessionId])
   @@index([tenantId, toolName])
   @@map("action_logs")
+}
+
+model Bot {
+  id                       String         @id @default(uuid())
+  tenantId                 String         @map("tenant_id")
+  name                     String
+  avatarUrl                String?        @map("avatar_url")
+  welcomeMessage           String         @default("Hi, how can I help?") @map("welcome_message")
+  placeholder              String         @default("Ask me anything...") @map("placeholder")
+  themeColor               String         @default("#2563eb") @map("theme_color")
+  position                 WidgetPosition @default(BOTTOM_RIGHT)
+  zIndex                   Int            @default(2147483000) @map("z_index")
+  status                   BotStatus      @default(ACTIVE)
+  suggestedQuestions       String[]       @default([]) @map("suggested_questions")
+  allowAnonymous           Boolean        @default(true) @map("allow_anonymous")
+  requireSignedIdentity    Boolean        @default(false) @map("require_signed_identity")
+  identitySecretEncrypted  String?        @map("identity_secret_encrypted")
+  tenant                   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  domains                  BotDomain[]
+  widgetSessions           WidgetSession[]
+  chatSessions             ChatSession[]
+  actionLogs               ActionLog[]
+  toolExecutions           ToolExecution[]
+  actionConfirmations      ActionConfirmation[]
+  createdAt                DateTime       @default(now()) @map("created_at")
+  updatedAt                DateTime       @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@map("bots")
+}
+
+model BotDomain {
+  id        String   @id @default(uuid())
+  botId     String   @map("bot_id")
+  domain    String
+  enabled   Boolean  @default(true)
+  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([botId, domain])
+  @@index([domain, enabled])
+  @@map("bot_domains")
+}
+
+model WidgetUser {
+  id             String          @id @default(uuid())
+  tenantId       String          @map("tenant_id")
+  externalUserId String?         @map("external_user_id")
+  email          String?
+  name           String?
+  authMode       String          @default("anonymous") @map("auth_mode")
+  metadata       Json            @default("{}")
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessions       WidgetSession[]
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@index([tenantId, externalUserId])
+  @@index([tenantId, email])
+  @@map("widget_users")
+}
+
+model WidgetSession {
+  id               String              @id @default(uuid())
+  tenantId         String              @map("tenant_id")
+  botId            String              @map("bot_id")
+  widgetUserId     String              @map("widget_user_id")
+  sessionTokenHash String              @unique @map("session_token_hash")
+  origin           String?
+  status           WidgetSessionStatus @default(ACTIVE)
+  lastSeenAt       DateTime            @default(now()) @map("last_seen_at")
+  expiresAt        DateTime?           @map("expires_at")
+  metadata         Json                @default("{}")
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bot              Bot                 @relation(fields: [botId], references: [id], onDelete: Cascade)
+  widgetUser       WidgetUser          @relation(fields: [widgetUserId], references: [id], onDelete: Cascade)
+  chatSessions     ChatSession[]
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  @@index([tenantId, botId, status])
+  @@index([widgetUserId, status])
+  @@map("widget_sessions")
+}
+
+model ApiConnector {
+  id                  String              @id @default(uuid())
+  tenantId            String              @map("tenant_id")
+  name                String
+  baseUrl             String              @map("base_url")
+  authType            IntegrationAuthType @map("auth_type")
+  authConfigEncrypted String?             @map("auth_config_encrypted")
+  headersEncrypted    String?             @map("headers_encrypted")
+  enabled             Boolean             @default(true)
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  endpoints           ApiEndpoint[]
+  authConfigs         AuthConfig[]
+  oauthConnections    OAuthConnection[]
+  apiCredentials      ApiCredential[]
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  @@index([tenantId, enabled])
+  @@map("api_connectors")
+}
+
+model ApiEndpoint {
+  id                   String             @id @default(uuid())
+  connectorId          String             @map("connector_id")
+  name                 String
+  toolKey              String             @map("tool_key")
+  method               HttpMethod
+  path                 String
+  description          String
+  inputSchema          Json               @default("{}") @map("input_schema")
+  requestMapping       Json               @default("{}") @map("request_mapping")
+  responseMapping      Json               @default("{}") @map("response_mapping")
+  confirmationRequired Boolean            @default(false) @map("confirmation_required")
+  allowedRoles         String[]           @default(["admin", "member"]) @map("allowed_roles")
+  enabled              Boolean            @default(true)
+  connector            ApiConnector       @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  toolExecutions       ToolExecution[]
+  actionConfirmations  ActionConfirmation[]
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  @@unique([connectorId, toolKey])
+  @@index([toolKey, enabled])
+  @@index([connectorId, enabled])
+  @@map("api_endpoints")
+}
+
+model ToolExecution {
+  id            String              @id @default(uuid())
+  tenantId      String              @map("tenant_id")
+  botId         String?             @map("bot_id")
+  widgetUserId  String?             @map("widget_user_id")
+  chatSessionId String?             @map("chat_session_id")
+  endpointId    String              @map("endpoint_id")
+  toolKey       String              @map("tool_key")
+  status        ToolExecutionStatus @default(EXECUTING)
+  inputPayload  Json                @default("{}") @map("input_payload")
+  outputPayload Json                @default("{}") @map("output_payload")
+  errorMessage  String?             @map("error_message")
+  confirmedAt   DateTime?           @map("confirmed_at")
+  executedAt    DateTime?           @map("executed_at")
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bot           Bot?                @relation(fields: [botId], references: [id], onDelete: SetNull)
+  chatSession   ChatSession?        @relation(fields: [chatSessionId], references: [id], onDelete: SetNull)
+  endpoint      ApiEndpoint         @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  @@index([tenantId, toolKey, status])
+  @@index([chatSessionId, createdAt])
+  @@map("tool_executions")
+}
+
+model ActionConfirmation {
+  id            String              @id @default(uuid())
+  tenantId      String              @map("tenant_id")
+  botId         String?             @map("bot_id")
+  widgetUserId  String?             @map("widget_user_id")
+  chatSessionId String?             @map("chat_session_id")
+  endpointId    String              @map("endpoint_id")
+  status        ToolExecutionStatus @default(PENDING_CONFIRMATION)
+  preview       Json                @default("{}")
+  inputPayload  Json                @default("{}") @map("input_payload")
+  confirmedAt   DateTime?           @map("confirmed_at")
+  expiresAt     DateTime?           @map("expires_at")
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bot           Bot?                @relation(fields: [botId], references: [id], onDelete: SetNull)
+  chatSession   ChatSession?        @relation(fields: [chatSessionId], references: [id], onDelete: SetNull)
+  endpoint      ApiEndpoint         @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  @@index([tenantId, status])
+  @@index([chatSessionId, status])
+  @@map("action_confirmations")
+}
+
+model AuthConfig {
+  id                  String              @id @default(uuid())
+  tenantId            String              @map("tenant_id")
+  connectorId         String?             @map("connector_id")
+  name                String
+  authType            IntegrationAuthType @map("auth_type")
+  configEncrypted     String?             @map("config_encrypted")
+  enabled             Boolean             @default(true)
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connector           ApiConnector?       @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  @@index([tenantId, enabled])
+  @@map("auth_configs")
+}
+
+model OAuthConnection {
+  id                    String            @id @default(uuid())
+  tenantId              String            @map("tenant_id")
+  connectorId           String?           @map("connector_id")
+  externalUserId        String?           @map("external_user_id")
+  accessTokenEncrypted  String?           @map("access_token_encrypted")
+  refreshTokenEncrypted String?           @map("refresh_token_encrypted")
+  scopes                String[]          @default([])
+  expiresAt             DateTime?         @map("expires_at")
+  metadata              Json              @default("{}")
+  tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connector             ApiConnector?     @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  @@index([tenantId, connectorId])
+  @@map("oauth_connections")
+}
+
+model ApiCredential {
+  id                  String        @id @default(uuid())
+  tenantId            String        @map("tenant_id")
+  connectorId         String?       @map("connector_id")
+  name                String
+  secretEncrypted     String        @map("secret_encrypted")
+  metadata            Json          @default("{}")
+  tenant              Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connector           ApiConnector? @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  @@index([tenantId, connectorId])
+  @@map("api_credentials")
 }
 
 model WebhookEndpoint {

@@ -29,6 +29,7 @@ const nav = [
   { href: '/upload', label: 'Upload', icon: Upload },
   { href: '/dashboard/crawl-jobs', label: 'Crawl Jobs', icon: Database },
   { href: '/dashboard/chat', label: 'Chat', icon: MessageSquare },
+  { href: '/dashboard/bots', label: 'Bots', icon: Bot },
   { href: '/dashboard/integrations', label: 'Integrations', icon: Plug },
   { href: '/dashboard/custom-api', label: 'Custom API', icon: GitBranch },
   { href: '/dashboard/action-logs', label: 'Action Logs', icon: ListChecks },

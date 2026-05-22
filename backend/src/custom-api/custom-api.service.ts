@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { isIP } from 'net';
 import { Prisma } from '@prisma/client';
 import { TokenCryptoService } from '../integrations/token-crypto.service';
@@ -11,10 +12,11 @@ export class CustomApiService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: TokenCryptoService,
+    private readonly config: ConfigService,
   ) {}
 
   async createConnector(tenantId: string, dto: CreateCustomApiConnectorDto) {
-    assertPublicBaseUrl(dto.baseUrl);
+    assertPublicBaseUrl(dto.baseUrl, this.allowPrivateConnectorUrls());
     return this.prisma.customApiConnector.create({
       data: {
         tenantId,
@@ -32,7 +34,7 @@ export class CustomApiService {
   }
 
   async updateConnector(tenantId: string, id: string, dto: Partial<CreateCustomApiConnectorDto>) {
-    if (dto.baseUrl) assertPublicBaseUrl(dto.baseUrl);
+    if (dto.baseUrl) assertPublicBaseUrl(dto.baseUrl, this.allowPrivateConnectorUrls());
     await this.assertConnector(tenantId, id);
     return this.prisma.customApiConnector.update({
       where: { id },
@@ -97,8 +99,12 @@ export class CustomApiService {
   async testEndpoint(tenantId: string, id: string) {
     const endpoint = await this.prisma.customApiEndpoint.findFirst({ where: { id, connector: { tenantId } }, include: { connector: true } });
     if (!endpoint) throw new NotFoundException('Endpoint not found.');
-    assertPublicBaseUrl(endpoint.connector.baseUrl);
+    assertPublicBaseUrl(endpoint.connector.baseUrl, this.allowPrivateConnectorUrls());
     return { ok: true, message: 'Endpoint configuration is valid.', endpoint: endpoint.name };
+  }
+
+  private allowPrivateConnectorUrls() {
+    return this.config.get<string>('NODE_ENV') !== 'production' || this.config.get<boolean>('CUSTOM_API_ALLOW_PRIVATE_URLS', false);
   }
 
   private async assertConnector(tenantId: string, id: string) {
@@ -112,10 +118,11 @@ export class CustomApiService {
   }
 }
 
-function assertPublicBaseUrl(value: string) {
+function assertPublicBaseUrl(value: string, allowPrivate = false) {
   const url = new URL(value);
   if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new BadRequestException('Only HTTP(S) custom API URLs are allowed.');
   const host = url.hostname.toLowerCase();
+  if (allowPrivate) return;
   if (host === 'localhost' || host.endsWith('.localhost') || host === 'metadata.google.internal') {
     throw new BadRequestException('Private/internal custom API hosts are not allowed.');
   }

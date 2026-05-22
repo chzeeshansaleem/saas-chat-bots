@@ -52,6 +52,13 @@ services:
     depends_on:
       - backend
 
+  widget:
+    build:
+      context: .
+      dockerfile: apps/widget/Dockerfile
+    ports:
+      - "5173:8080"
+
   nginx:
     image: nginx:1.27-alpine
     ports:
@@ -61,6 +68,7 @@ services:
     depends_on:
       - frontend
       - backend
+      - widget
 
 volumes:
   postgres_data:

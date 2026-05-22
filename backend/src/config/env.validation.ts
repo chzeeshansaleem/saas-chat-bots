@@ -36,6 +36,9 @@ export const envValidationSchema = Joi.object({
   WEBHOOK_SECRET: Joi.string().allow('').optional(),
   ACTION_QUEUE_CONCURRENCY: Joi.number().default(2),
   SYNC_QUEUE_CONCURRENCY: Joi.number().default(2),
+  WIDGET_CDN_URL: Joi.string().uri().default('http://localhost:5173/widget.js'),
+  WIDGET_ALLOWED_DEV_ORIGINS: Joi.string().default('http://localhost:3000,http://localhost:5173'),
+  CUSTOM_API_ALLOW_PRIVATE_URLS: Joi.boolean().default(false),
   BACKEND_PORT: Joi.number().default(4000),
   CORS_ORIGIN: Joi.string().default('http://localhost:3000'),
 }).custom((env, helpers) => {

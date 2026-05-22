@@ -25,6 +25,16 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { CustomApiModule } from './custom-api/custom-api.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { SyncModule } from './sync/sync.module';
+import { BotsModule } from './bots/bots.module';
+import { WidgetModule } from './widget/widget.module';
+import { ApiConnectorsModule } from './api-connectors/api-connectors.module';
+import { ActionExecutorModule } from './action-executor/action-executor.module';
+import { AuthConfigModule } from './auth-config/auth-config.module';
+import { AiOrchestratorModule } from './ai-orchestrator/ai-orchestrator.module';
+import { RagModule } from './rag/rag.module';
+import { SecurityModule } from './security/security.module';
+import { DomainVerificationModule } from './domain-verification/domain-verification.module';
+import { WidgetSessionsModule } from './widget-sessions/widget-sessions.module';
 
 @Module({
   imports: [
@@ -60,6 +70,16 @@ import { SyncModule } from './sync/sync.module';
     CustomApiModule,
     PermissionsModule,
     SyncModule,
+    BotsModule,
+    WidgetModule,
+    ApiConnectorsModule,
+    ActionExecutorModule,
+    AuthConfigModule,
+    AiOrchestratorModule,
+    RagModule,
+    SecurityModule,
+    DomainVerificationModule,
+    WidgetSessionsModule,
   ],
 })
 export class AppModule implements NestModule {

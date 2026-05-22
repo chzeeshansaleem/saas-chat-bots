@@ -1,11 +1,11 @@
-import { IsIn, IsObject, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateCustomApiConnectorDto {
   @IsString()
   @MaxLength(120)
   name!: string;
 
-  @IsUrl({ require_protocol: true })
+  @IsString()
   baseUrl!: string;
 
   @IsIn(['NONE', 'API_KEY', 'BEARER_TOKEN', 'BASIC'])

@@ -5,7 +5,9 @@
   "description": "Phase 1 multi-tenant AI knowledge base chatbot platform.",
   "workspaces": [
     "backend",
-    "frontend"
+    "frontend",
+    "apps/widget",
+    "packages/*"
   ],
   "dependencies": {
     "@nestjs/common": "^11.1.21",
