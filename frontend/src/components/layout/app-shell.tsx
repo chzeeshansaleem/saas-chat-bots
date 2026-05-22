@@ -3,7 +3,21 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { Bot, Database, LayoutDashboard, LogOut, MessageSquare, Moon, Settings, Upload, Sun } from 'lucide-react';
+import {
+  Bot,
+  Database,
+  GitBranch,
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
+  MessageSquare,
+  Moon,
+  Plug,
+  Settings,
+  Sun,
+  Upload,
+  Webhook,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -15,6 +29,10 @@ const nav = [
   { href: '/upload', label: 'Upload', icon: Upload },
   { href: '/dashboard/crawl-jobs', label: 'Crawl Jobs', icon: Database },
   { href: '/dashboard/chat', label: 'Chat', icon: MessageSquare },
+  { href: '/dashboard/integrations', label: 'Integrations', icon: Plug },
+  { href: '/dashboard/custom-api', label: 'Custom API', icon: GitBranch },
+  { href: '/dashboard/action-logs', label: 'Action Logs', icon: ListChecks },
+  { href: '/dashboard/webhooks', label: 'Webhooks', icon: Webhook },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -44,7 +62,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 href={item.href}
                 className={cn(
                   'flex h-10 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground',
-                  path === item.href && 'bg-muted text-foreground',
+                  (path === item.href || (item.href !== '/dashboard' && path.startsWith(item.href))) && 'bg-muted text-foreground',
                 )}
               >
                 <Icon className="h-4 w-4" />

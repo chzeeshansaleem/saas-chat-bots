@@ -15,6 +15,16 @@ import { ChatModule } from './chat/chat.module';
 import { CrawlerModule } from './crawler/crawler.module';
 import { QueuesModule } from './queues/queues.module';
 import { WebsocketModule } from './websocket/websocket.module';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { OAuthModule } from './oauth/oauth.module';
+import { ToolsModule } from './tools/tools.module';
+import { ActionsModule } from './actions/actions.module';
+import { ActionRouterModule } from './action-router/action-router.module';
+import { ActionLogsModule } from './action-logs/action-logs.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
+import { CustomApiModule } from './custom-api/custom-api.module';
+import { PermissionsModule } from './permissions/permissions.module';
+import { SyncModule } from './sync/sync.module';
 
 @Module({
   imports: [
@@ -40,6 +50,16 @@ import { WebsocketModule } from './websocket/websocket.module';
     CrawlerModule,
     QueuesModule,
     WebsocketModule,
+    IntegrationsModule,
+    OAuthModule,
+    ToolsModule,
+    ActionRouterModule,
+    ActionsModule,
+    ActionLogsModule,
+    WebhooksModule,
+    CustomApiModule,
+    PermissionsModule,
+    SyncModule,
   ],
 })
 export class AppModule implements NestModule {

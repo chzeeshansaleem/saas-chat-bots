@@ -56,6 +56,50 @@ enum ChatTitleJobStatus {
   FAILED
 }
 
+enum IntegrationAuthType {
+  OAUTH2
+  API_KEY
+  BEARER_TOKEN
+  BASIC
+  NONE
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+  EXPIRED
+}
+
+enum ToolActionType {
+  READ
+  WRITE
+  DELETE
+}
+
+enum ActionRequestStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED
+  EXECUTING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum ActionLogStatus {
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum HttpMethod {
+  GET
+  POST
+  PATCH
+  PUT
+  DELETE
+}
+
 model User {
   id           String       @id @default(uuid())
   email        String       @unique
@@ -63,6 +107,9 @@ model User {
   passwordHash String       @map("password_hash")
   refreshHash  String?      @map("refresh_hash")
   memberships  Membership[]
+  connectedIntegrations TenantIntegration[]
+  actionRequests ActionRequest[]
+  actionLogs     ActionLog[]
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
@@ -80,6 +127,13 @@ model Tenant {
   chatSessions     ChatSession[]
   chatTitleJobs     ChatTitleJob[]
   crawlJobs        CrawlJob[]
+  tenantIntegrations TenantIntegration[]
+  actionRequests   ActionRequest[]
+  actionLogs       ActionLog[]
+  webhookEndpoints WebhookEndpoint[]
+  webhookEvents    WebhookEvent[]
+  externalResourceCaches ExternalResourceCache[]
+  customApiConnectors CustomApiConnector[]
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
 
@@ -222,6 +276,197 @@ model ChatTitleJob {
 
   @@index([tenantId, chatSessionId, status])
   @@map("chat_title_jobs")
+}
+
+model IntegrationProvider {
+  id        String              @id @default(uuid())
+  name      String
+  key       String              @unique
+  authType  IntegrationAuthType @map("auth_type")
+  oauthConfig Json              @default("{}") @map("oauth_config")
+  scopes    String[]            @default([])
+  integrations TenantIntegration[]
+  tools     ToolDefinition[]
+  webhookEndpoints WebhookEndpoint[]
+  webhookEvents WebhookEvent[]
+  externalResourceCaches ExternalResourceCache[]
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  @@map("integration_providers")
+}
+
+model TenantIntegration {
+  id                    String            @id @default(uuid())
+  tenantId              String            @map("tenant_id")
+  providerId            String            @map("provider_id")
+  connectedByUserId     String            @map("connected_by_user_id")
+  status                IntegrationStatus @default(CONNECTED)
+  accessTokenEncrypted  String?           @map("access_token_encrypted")
+  refreshTokenEncrypted String?           @map("refresh_token_encrypted")
+  expiresAt             DateTime?         @map("expires_at")
+  scopes                String[]          @default([])
+  metadata              Json              @default("{}")
+  tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider              IntegrationProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  connectedBy           User              @relation(fields: [connectedByUserId], references: [id], onDelete: Cascade)
+  actionLogs            ActionLog[]
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  @@unique([tenantId, providerId])
+  @@index([tenantId, status])
+  @@map("tenant_integrations")
+}
+
+model ToolDefinition {
+  id                    String         @id @default(uuid())
+  providerId            String         @map("provider_id")
+  name                  String
+  key                   String         @unique
+  description           String
+  actionType            ToolActionType @map("action_type")
+  inputSchema           Json           @default("{}") @map("input_schema")
+  requiredScopes        String[]       @default([]) @map("required_scopes")
+  confirmationRequired  Boolean        @default(false) @map("confirmation_required")
+  enabled               Boolean        @default(true)
+  provider              IntegrationProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  actionRequests        ActionRequest[]
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+
+  @@index([providerId, enabled])
+  @@map("tool_definitions")
+}
+
+model ActionRequest {
+  id                    String              @id @default(uuid())
+  tenantId              String              @map("tenant_id")
+  userId                String              @map("user_id")
+  toolId                String              @map("tool_id")
+  status                ActionRequestStatus @default(PENDING_CONFIRMATION)
+  inputPayload          Json                @default("{}") @map("input_payload")
+  outputPayload         Json                @default("{}") @map("output_payload")
+  errorMessage          String?             @map("error_message")
+  requiresConfirmation  Boolean             @default(true) @map("requires_confirmation")
+  confirmedAt           DateTime?           @map("confirmed_at")
+  executedAt            DateTime?           @map("executed_at")
+  tenant                Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tool                  ToolDefinition      @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  createdAt             DateTime            @default(now()) @map("created_at")
+
+  @@index([tenantId, userId, status])
+  @@map("action_requests")
+}
+
+model ActionLog {
+  id            String          @id @default(uuid())
+  tenantId      String          @map("tenant_id")
+  userId        String          @map("user_id")
+  integrationId String?         @map("integration_id")
+  toolName      String          @map("tool_name")
+  actionType    ToolActionType  @map("action_type")
+  inputPayload  Json            @default("{}") @map("input_payload")
+  outputPayload Json            @default("{}") @map("output_payload")
+  status        ActionLogStatus
+  errorMessage  String?         @map("error_message")
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integration   TenantIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, toolName])
+  @@map("action_logs")
+}
+
+model WebhookEndpoint {
+  id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
+  providerId String    @map("provider_id")
+  secret     String
+  url        String
+  enabled    Boolean   @default(true)
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider   IntegrationProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId, providerId])
+  @@map("webhook_endpoints")
+}
+
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  providerId  String    @map("provider_id")
+  eventType   String    @map("event_type")
+  payload     Json      @default("{}")
+  processed   Boolean   @default(false)
+  processedAt DateTime? @map("processed_at")
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider    IntegrationProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, providerId, processed])
+  @@map("webhook_events")
+}
+
+model ExternalResourceCache {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  providerId   String   @map("provider_id")
+  resourceType String   @map("resource_type")
+  externalId   String   @map("external_id")
+  data         Json     @default("{}")
+  syncedAt     DateTime @default(now()) @map("synced_at")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider     IntegrationProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, providerId, resourceType, externalId])
+  @@index([tenantId, resourceType])
+  @@map("external_resource_cache")
+}
+
+model CustomApiConnector {
+  id                  String              @id @default(uuid())
+  tenantId            String              @map("tenant_id")
+  name                String
+  baseUrl             String              @map("base_url")
+  authType            IntegrationAuthType @map("auth_type")
+  authConfigEncrypted String?             @map("auth_config_encrypted")
+  headersEncrypted    String?             @map("headers_encrypted")
+  enabled             Boolean             @default(true)
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  endpoints           CustomApiEndpoint[]
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  @@index([tenantId, enabled])
+  @@map("custom_api_connectors")
+}
+
+model CustomApiEndpoint {
+  id                   String             @id @default(uuid())
+  connectorId          String             @map("connector_id")
+  name                 String
+  method               HttpMethod
+  path                 String
+  description          String
+  inputSchema          Json               @default("{}") @map("input_schema")
+  responseMapping      Json               @default("{}") @map("response_mapping")
+  confirmationRequired Boolean            @default(false) @map("confirmation_required")
+  allowedRoles         String[]           @default(["ADMIN"]) @map("allowed_roles")
+  enabled              Boolean            @default(true)
+  connector            CustomApiConnector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  @@index([connectorId, enabled])
+  @@map("custom_api_endpoints")
 }
 
 model CrawlJob {
